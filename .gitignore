@@ -1,0 +1,14 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+*
+!.gitignore
+!README.md
+!requirements.txt
+!robot.toml
+!libraries/
+!libraries/AudioTranscription.py
+!libraries/MarianTranslation.py
+!scripts/
+!scripts/download_translation_model.py
+!tests/
+!tests/transcribe_audio.robot
+!tests/ReportAssertions.py
