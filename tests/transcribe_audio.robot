@@ -7,6 +7,7 @@ Library             ../tests/ReportAssertions.py
 
 *** Variables ***
 ${AUDIO_FILE}       ${EMPTY}
+${TRANSCRIPTION_FILE}    ${EMPTY}
 ${WHISPER_MODEL}    base
 
 *** Test Cases ***
@@ -17,6 +18,7 @@ Transcribe Audio And Save Full Transcript
     Should Not Be Empty    ${audio_file}    Set AUDIO_FILE to the path of an audio file.
     ${result}=    Transcribe Audio    ${audio_file}
     Should Not Be Empty    ${result}[text]
+    Assert Transcription Saved In Project Output Directory    ${result}[output_path]
     File Should Exist    ${result}[output_path]
     Output File Should Contain Text    ${result}[output_path]    ${result}[text]
 
@@ -39,19 +41,23 @@ Translate English Text And Save Portuguese Output
     Should Be Equal    ${result}[text]    Olá, como estás?
     Output File Should Contain Text    ${result}[output_path]    ${result}[text]
 
-Transcribe And Translate Audio Locally To Portuguese
-    [Documentation]    Transcribes configured audio and translates English speech locally.
-    [Tags]    integration    translation    whisper    marian
-    ${audio_file}=    Get Environment Variable    AUDIO_FILE    ${AUDIO_FILE}
-    Should Not Be Empty    ${audio_file}    Set AUDIO_FILE to the path of an audio file.
-    ${transcription}=    Transcribe Audio    ${audio_file}
-    ${source_language}=    Detect Transcription Language    ${transcription}[text]
-    ${output_path}=    Join Path    ${OUTPUT DIR}    transcription.pt.txt
-    ${result}=    Translate Text To Portuguese
-    ...    ${transcription}[text]
+Translate Saved Transcription File To Portuguese
+    [Documentation]    Reads a saved transcript and writes only Portuguese text to saida-trad.
+    [Tags]    integration    translation    marian
+    ${transcription_file}=    Get Environment Variable    TRANSCRIPTION_FILE    ${TRANSCRIPTION_FILE}
+    IF    not $transcription_file
+        ${audio_file}=    Get Environment Variable    AUDIO_FILE    ${AUDIO_FILE}
+        Should Not Be Empty    ${audio_file}    Set AUDIO_FILE or TRANSCRIPTION_FILE.
+        ${transcription_file}=    Get Transcription Output Path    ${audio_file}
+    END
+    File Should Exist    ${transcription_file}
+    ${source_text}=    Get File    ${transcription_file}    encoding=UTF-8
+    ${source_language}=    Detect Transcription Language    ${source_text}
+    ${result}=    Translate Transcription File To Portuguese
+    ...    ${transcription_file}
     ...    ${source_language}
-    ...    ${output_path}
     Should Not Be Empty    ${result}[text]
+    Assert Translation Saved In Project Output Directory    ${result}[output_path]
     Output File Should Contain Text    ${result}[output_path]    ${result}[text]
     IF    $source_language.lower().startswith("en")
         Should Be True    ${result}[translated]

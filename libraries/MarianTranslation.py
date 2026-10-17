@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,11 +29,31 @@ class MarianTranslation:
             translated = False
         elif language == "en":
             tokenizer, model = self._get_model()
-            encoded = tokenizer([text.strip()], return_tensors="pt", padding=True)
-            generated = model.generate(**encoded)
-            portuguese_text = tokenizer.batch_decode(
-                generated, skip_special_tokens=True
-            )[0].strip()
+            limits = (
+                getattr(tokenizer, "model_max_length", None),
+                getattr(model.config, "max_position_embeddings", None),
+            )
+            valid_limits = [
+                limit
+                for limit in limits
+                if isinstance(limit, int) and 0 < limit < 1_000_000
+            ]
+            if not valid_limits:
+                raise RuntimeError("Could not determine the Marian model input limit.")
+
+            chunks = self._split_text(
+                text.strip(), tokenizer, min(valid_limits)
+            )
+            translated_chunks = []
+            for chunk in chunks:
+                encoded = tokenizer([chunk], return_tensors="pt", padding=True)
+                generated = model.generate(**encoded)
+                translated_chunks.append(
+                    tokenizer.batch_decode(
+                        generated, skip_special_tokens=True
+                    )[0].strip()
+                )
+            portuguese_text = " ".join(translated_chunks).strip()
             translated = True
         else:
             raise ValueError(
@@ -52,6 +73,30 @@ class MarianTranslation:
             "output_path": str(destination.resolve()),
         }
 
+    def translate_transcription_file_to_portuguese(
+        self, transcription_path: str, source_language: str
+    ) -> dict[str, str | bool]:
+        """Translate a saved transcription and write only its text to saida-trad."""
+        if not transcription_path:
+            raise ValueError("Transcription file path was not provided.")
+
+        source = Path(transcription_path).expanduser()
+        if not source.is_file():
+            raise FileNotFoundError(f"Transcription file does not exist: {source}")
+
+        text = source.read_text(encoding="utf-8").strip()
+        if not text:
+            raise ValueError(f"Transcription file is empty: {source}")
+
+        destination = (
+            Path(__file__).resolve().parents[1]
+            / "saida-trad"
+            / source.with_suffix(".pt.txt").name
+        )
+        return self.translate_text_to_portuguese(
+            text, source_language, str(destination)
+        )
+
     def _get_model(self) -> tuple[Any, Any]:
         if self._model is None or self._tokenizer is None:
             from transformers import MarianMTModel, MarianTokenizer
@@ -64,3 +109,52 @@ class MarianTranslation:
             )
             self._model.eval()
         return self._tokenizer, self._model
+
+    @staticmethod
+    def _split_text(text: str, tokenizer: Any, max_input_tokens: int) -> list[str]:
+        def token_count(value: str) -> int:
+            return len(
+                tokenizer(
+                    value,
+                    add_special_tokens=True,
+                    verbose=False,
+                )["input_ids"]
+            )
+
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        chunks: list[str] = []
+        current = ""
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            if token_count(sentence) > max_input_tokens:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                words = sentence.split()
+                for word in words:
+                    candidate = f"{current} {word}".strip()
+                    if token_count(candidate) > max_input_tokens:
+                        if not current:
+                            raise ValueError(
+                                "A single word exceeds the Marian model input limit."
+                            )
+                        chunks.append(current)
+                        current = word
+                    else:
+                        current = candidate
+                continue
+
+            candidate = f"{current} {sentence}".strip()
+            if current and token_count(candidate) > max_input_tokens:
+                chunks.append(current)
+                current = sentence
+            else:
+                current = candidate
+
+        if current:
+            chunks.append(current)
+        return chunks

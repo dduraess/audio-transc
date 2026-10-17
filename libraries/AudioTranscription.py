@@ -30,10 +30,8 @@ class AudioTranscription:
         if not source_text:
             raise RuntimeError("Whisper did not detect any speech in the audio.")
 
-        destination = (
-            Path(output_path).expanduser()
-            if output_path
-            else source_path.with_suffix(".txt")
+        destination = Path(output_path).expanduser() if output_path else self.get_transcription_output_path(
+            str(source_path)
         )
         self._write_text(destination, source_text)
 
@@ -41,6 +39,16 @@ class AudioTranscription:
             "text": source_text,
             "output_path": str(destination.resolve()),
         }
+
+    @staticmethod
+    def get_transcription_output_path(audio_path: str) -> Path:
+        """Return the default transcript path for an audio file."""
+        source_path = Path(audio_path).expanduser()
+        return (
+            Path(__file__).resolve().parents[1]
+            / "saida-transcr"
+            / source_path.with_suffix(".txt").name
+        )
 
     @staticmethod
     def detect_transcription_language(text: str) -> str:

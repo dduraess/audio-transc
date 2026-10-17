@@ -55,3 +55,27 @@ class ReportAssertions:
                 f"Output file content mismatch: expected {expected_text!r}, "
                 f"got {actual_text!r}."
             )
+
+    def assert_transcription_saved_in_project_output_directory(
+        self, output_path: str
+    ) -> None:
+        output_file = Path(output_path).resolve()
+        expected_directory = (
+            Path(__file__).resolve().parents[1] / "saida-transcr"
+        ).resolve()
+        if expected_directory not in output_file.parents:
+            raise AssertionError(
+                f"Expected transcription in {expected_directory}, got {output_file}."
+            )
+
+    def assert_translation_saved_in_project_output_directory(
+        self, output_path: str
+    ) -> None:
+        output_file = Path(output_path).resolve()
+        expected_directory = (
+            Path(__file__).resolve().parents[1] / "saida-trad"
+        ).resolve()
+        if expected_directory not in output_file.parents:
+            raise AssertionError(
+                f"Expected translation in {expected_directory}, got {output_file}."
+            )
